@@ -1,0 +1,209 @@
+---
+title: "question 1"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-02-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(stats)
+library(ggplot2)
+```
+
+```{r}
+# Define function for Monte Carlo simulation
+simulations <- function(n_sim, n, p_range) {
+  MSE_compare_train <- c() # Store mean square error for each number of predictors
+  MSE_compare_test <- c()
+  R2_compare_train <- c()
+  R2_compare_test <- c() # Store r2 score for each number of predictors
+  
+  for (p in p_range) {
+    MSE_train <- c() # Store mean square error for each simulation
+    MSE_test <- c()
+    R2_train <- c() # Store r2 score for each simulation
+    R2_test <- c()
+    
+    for (simulation in 1:n_sim) {
+      # Generate X and y
+      X <- matrix(rnorm(n * p), nrow = n) # Generate X 
+      true_beta <- c(rep(1, 5), rnorm(p - 5))  # Define true coefficients
+      error <- rnorm(n, mean = 0, sd = 0.001) # Generate random error 
+      y <- X %*% true_beta + error # Generate Y using linear regression model
+      
+      # Split Data into training and testing
+      set.seed(23)
+      train_index <- sample.int(n, size = floor(0.8 * n), replace = FALSE)
+      X_train <- X[train_index, ]
+      X_test <- X[-train_index, ]
+      y_train <- y[train_index]
+      y_test <- y[-train_index]
+      
+      # Fit linear model
+      model <- lm(y_train ~ X_train)
+      
+      # Extract estimate coefficients
+      beta_hat <- coef(model)
+      
+      # Add intercept term into X and coefficients
+      X_all_train <- cbind(1, X_train)
+      X_all_test <- cbind(1, X_test)
+      
+      # Predict on training and testing sets
+      y_pred_train <- X_all_train %*% beta_hat
+      y_pred_test <- X_all_test %*% beta_hat
+      
+      #suppressWarnings({
+        #y_pred_train <- predict(model, newdata = data.frame(X_train))
+        #y_pred_test <- predict(model, newdata = data.frame(X_test))
+      #})
+      
+      # Calculate mean squared error
+      mse_train <- mean((y_train - y_pred_train)^2)
+      mse_test <- mean((y_test - y_pred_test)^2)
+      MSE_train <- c(MSE_train, mse_train)
+      MSE_test <- c(MSE_test, mse_test)
+      
+      # Calculate r2 score
+      #r2_train <- var( y_pred_train)/var(y_train)
+      #r2_test <- var(y_pred_test)/var(y_test)
+      
+      r2_train <- 1- (var(y_train - y_pred_train)/var(y_train))
+      r2_test <- 1 - (var(y_test - y_pred_test)/var(y_test))
+        
+      #r2_train <- summary(model)$r.squared
+      #r2_test <- 1 - (sum((y_test - y_pred_test)^2) / sum((y_test - mean(y_test))^2))
+        
+      R2_train <- c(R2_train, r2_train)
+      R2_test <- c(R2_test, r2_test)
+    }
+    
+    # Save MSE for comparing later
+    MSE_mean_train <- mean(MSE_train)
+    MSE_mean_test <- mean(MSE_test)
+    MSE_compare_train[[as.character(p)]] <- MSE_mean_train
+    MSE_compare_test[[as.character(p)]] <- MSE_mean_test
+    
+    # Save R2 for comparing later
+    R2_mean_train <- mean(R2_train)
+    R2_mean_test <- mean(R2_test)
+    R2_compare_train[[as.character(p)]] <- R2_mean_train
+    R2_compare_test[[as.character(p)]] <- R2_mean_test
+  }
+  
+  return(list(MSE_compare_train, MSE_compare_test, R2_compare_train, R2_compare_test))
+}
+```
+
+```{r}
+# Set parameters
+n_sim <- 100 # Number of simulation
+n <- 100 # Number of observations
+p_range <- seq(6, 50, by = 1) # Range for number of predictors
+```
+
+```{r}
+# Run simulations
+simulation_results <- simulations(n_sim, n, p_range)
+```
+
+```{r}
+# Extracting results
+MSE_mean_train <- unlist(simulation_results[[1]])
+MSE_mean_test <- unlist(simulation_results[[2]])
+R2_mean_train <- unlist(simulation_results[[3]])
+R2_mean_test <- unlist(simulation_results[[4]])
+```
+
+```{r}
+# Create data frame for plotting MSE_mean_train
+mse_train_data <- data.frame(
+  p_range = p_range,
+  MSE_mean_train = MSE_mean_train
+)
+
+# Plot MSE_mean_train only
+mse_plot_train <- ggplot(mse_train_data, aes(x = p_range, y = MSE_mean_train)) +
+  geom_line(color = "blue") +
+  labs(x = "Number of Predictors", y = "MSE", title = "MSE(Mean Square Error) for Training Data Based on 80 observations")
+
+mse_plot_train
+```
+
+```{r}
+# Create data frame for plotting MSE_mean_train and MSE_mean_test
+mse_both_data <- data.frame(
+  p_range = p_range,
+  MSE_mean_train = MSE_mean_train,
+  MSE_mean_test = MSE_mean_test
+)
+
+# Plot MSE_mean_train and MSE_mean_test
+mse_plot_both <- ggplot(mse_both_data, aes(x = p_range)) +
+  geom_line(aes(y = MSE_mean_train), color = "blue", linetype = "solid") +
+  geom_line(aes(y = MSE_mean_test), color = "red", linetype = "solid") +
+  labs(x = "Number of Predictors", y = "MSE", title = "MSE(Mean Square Error) for Training and Testing Data") +
+  scale_linetype_manual(values = c("solid", "solid"))
+
+mse_plot_both
+```
+
+
+```{r}
+# Create data frame for plotting R2_mean_train
+r2_train_data <- data.frame(
+  p_range = p_range,
+  R2_mean_train = R2_mean_train
+)
+
+# Plot R2_mean_train only
+r2_plot_train <- ggplot(r2_train_data, aes(x = p_range, y = R2_mean_train)) +
+  geom_line(color = "blue") +
+  labs(x = "Number of Predictors", y = "R2 Score", title = "R2 Score for Training Data Based on 80 observations")
+
+r2_plot_train
+```
+
+```{r}
+# Create data frame for plotting R2_mean_train and R2_mean_test
+r2_both_data <- data.frame(
+  p_range = p_range,
+  R2_mean_train = R2_mean_train,
+  R2_mean_test = R2_mean_test
+)
+
+# Plot R2_mean_train and R2_mean_test
+r2_plot_both <- ggplot(r2_both_data, aes(x = p_range)) +
+  geom_line(aes(y = R2_mean_train), color = "blue", linetype = "solid") +
+  geom_line(aes(y = R2_mean_test), color = "red", linetype = "solid") +
+  labs(x = "Number of Predictors", y = "R2 Score", title = "R2 Score for Training and Testing Data") +
+  scale_linetype_manual(values = c("solid", "solid"))
+
+r2_plot_both
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
